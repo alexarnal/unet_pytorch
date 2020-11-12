@@ -6,6 +6,7 @@ Created on Mon Sep 14 14:34:50 2020
 @author: latente
 """
 
+
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -59,7 +60,7 @@ class UNet(nn.Module):
         x7 = self.down_conv_4(x6) #passed to second part of net
         x8 = self.max_pool_2x2(x7)
         x9 = self.down_conv_5(x8)
-        print(x9.size())
+        # print(x9.size())
         #decoder
         x10 = self.transpose_1(x9)
         x11 = self.up_conv_1(torch.cat([crop_tensor(x7,x10),x10],1))
@@ -70,10 +71,48 @@ class UNet(nn.Module):
         x16 = self.transpose_4(x15)
         x17 = self.up_conv_4(torch.cat([crop_tensor(x1,x16),x16],1))
         x18 = self.last_conv(x17)
-        print(x18.size())
+        # print(x18.size(),(x18.shape[0],x18.shape[2],x18.shape[3]))
+        return nn.Sigmoid()(x18)#.reshape((x18.shape[0],x18.shape[2],x18.shape[3]))
         
 
-image = torch.rand((1,1,572,572))
-plt.imshow(image[0][0])
+#Generate fake data
+x=torch.zeros((572,572))
+a, s = 100, 50
+for i in range(6):
+    x[a*i:a*i+s,a*i:a*i+s] = 1
+    x[a*i:a*i+s,572-a*i:572-a*i+s] = 1
+y=x[92:572-92,92:572-92].clone().long()
+x+=(0.5*torch.rand((572,572)))
+x = x-x.min()
+x /= (x.max()-x.min())
+plt.imshow(x);plt.title('X');plt.show()
+plt.imshow(y);plt.title('Y');plt.show()
+
+#Prepare dimensions for network      
+x.unsqueeze_(0).unsqueeze_(0);
+y.unsqueeze_(0);
+
+#Initialize model, loss and learning rate
 model = UNet()
-print(model(image))
+loss_fn = nn.BCELoss()
+learning_rate = 1e-5
+
+#Train
+for t in range(10):
+    y_pred = model(x)
+    plt.imshow(y_pred.detach().numpy()[0][0]);plt.title('Epoch %s Class 0'%t);plt.show()
+    plt.imshow(y_pred.detach().numpy()[0][1]);plt.title('Epoch %s Class 1'%t);plt.show()
+    
+    loss = loss_fn(y_pred, y)
+    print('Epoch', t, ':', loss.item())
+
+    model.zero_grad()
+    
+    loss.backward()
+    
+    with torch.no_grad():
+        for param in model.parameters():
+            param -= learning_rate * param.grad
+
+plt.imshow(y_pred.detach().numpy()[0][0]>0.5);plt.show()
+plt.imshow(y_pred.detach().numpy()[0][1]>0.5);plt.show()
